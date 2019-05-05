@@ -1,17 +1,17 @@
-import { generate, File } from "../src/generator";
+import { generate} from "../src/generator";
 import { expect, assert } from "chai";
+import { compileTypeScriptCode } from "./compiler";
 import * as fs from "fs";
-import { IFs, createFsFromVolume } from "memfs";
-import { resolve, dirname, basename } from "path";
+import { resolve } from "path";
 
 describe("generator", () => {
   it("should generate files", () => {
-    const files = generate({ count: 1 });
+    const files = generate({ count: 1, seed: "42" });
     expect(files).to.have.length(1);
   });
 
   it("should generate correct files", () => {
-    const files = generate({ count: 1 });
+    const files = generate({ count: 1, seed: "42" });
     const r = compileTypeScriptCode(files);
     if (r.diagnostics.length !== 0) {
       const diagnostics = r.diagnostics[0];
@@ -21,87 +21,17 @@ describe("generator", () => {
 
   it("should generate many files", () => {
     const count = 1000;
-    const files = generate({ count: count });
+    const files = generate({ count: count, seed: "42" });
     const r = compileTypeScriptCode(files);
     if (r.diagnostics.length !== 0) {
       const diagnostics = r.diagnostics[0];
       assert.fail(diagnostics.error + diagnostics.file);
     }
     expect(files).to.have.length(count);
+    
+    // files.forEach(x => {
+    //   fs.writeFileSync(resolve(process.cwd(), "generated", x.relativePath), x.contents);
+    // })
   });
 });
 
-import * as ts from "typescript";
-import { Volume } from "memfs/lib/volume";
-
-//
-// Result of compiling TypeScript code.
-//
-export interface CompilationResult {
-  code?: string;
-  diagnostics: ts.Diagnostic[];
-}
-
-function makeCompilerHost(mfs: IFs) {
-  const options = ts.getDefaultCompilerOptions();
-
-  const defaultHost = ts.createCompilerHost(options);
-  const libPath = defaultHost.getDefaultLibFileName(options);
-  const tsDir = dirname(libPath);
-  const libs = fs.readdirSync(tsDir).filter(x => x.endsWith(".d.ts"));
-  libs.forEach(lib => {
-    const libName = basename(lib);
-    const c = fs.readFileSync(resolve(tsDir, lib), "utf-8");
-    mfs.writeFileSync(resolve("/", libName), c);
-  });
-
-  const host: ts.CompilerHost = {
-    fileExists: path => mfs.readFileSync(path) !== undefined,
-    getSourceFile: path =>
-      ts.createSourceFile(
-        path,
-        mfs.readFileSync(path, "utf-8") as string,
-        ts.ScriptTarget.Latest
-      ),
-
-    readFile: path => mfs.readFileSync(path, "utf-8") as string,
-    getCurrentDirectory: () => "/",
-    getNewLine: () => ts.sys.newLine,
-    useCaseSensitiveFileNames: () => true,
-    getCanonicalFileName: path => path,
-    getDefaultLibFileName: o => {
-      return resolve("/", ts.getDefaultLibFileName(o));
-    },
-    writeFile: () => {
-      /* do nothing */
-    }
-  };
-  return { options, host };
-}
-
-function compileTypeScriptCode(code: ReadonlyArray<File>) {
-  const mfs = createFsFromVolume(new Volume());
-  const fileNames: string[] = [];
-  code.forEach(x => {
-    const absolutePath = resolve("/", x.relativePath);
-    fileNames.push(absolutePath);
-    mfs.writeFileSync(absolutePath, x.contents);
-  });
-
-  const { options, host } = makeCompilerHost(mfs);
-  const program = ts.createProgram(fileNames, options, host);
-  const diagnostics = ts.getPreEmitDiagnostics(program);
-  const emitResult = program.emit();
-  const formatHost: ts.FormatDiagnosticsHost = {
-    getNewLine: () => ts.sys.newLine,
-    getCurrentDirectory: () => "/",
-    getCanonicalFileName: x => x
-  };
-  const diag = emitResult.diagnostics.concat(diagnostics);
-  return {
-    diagnostics: diag.map(x => ({
-      error: ts.formatDiagnostic(x, formatHost),
-      file: x.file!.getText()
-    }))
-  };
-}

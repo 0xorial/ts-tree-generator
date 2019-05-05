@@ -2,21 +2,35 @@ import sr = require("seedrandom");
 
 export interface GenerateOptions {
   count: number;
+  seed: string;
+}
+
+export interface UsedReference {
+  file: File;
+  exports: string[];
 }
 
 export interface File {
   relativePath: string;
   contents: string;
   exports: Array<{ name: string }>;
+  referencedBy: Array<File>;
+  references: Array<UsedReference>;
 }
 
 export function generate(options: GenerateOptions): ReadonlyArray<File> {
-  const rng = sr("42");
+  const rng = sr(options.seed);
 
   const r: File[] = [];
   for (let i = 0; i < options.count; i++) {
     const file = makeFile();
-    r.push({ ...file, relativePath: "./test" + i + ".ts" });
+    const fullFile = {
+      ...file,
+      relativePath: "./test" + i + ".ts",
+      referencedBy: []
+    };
+    r.push(fullFile);
+    fullFile.references.forEach(x => x.file.referencedBy.push(fullFile));
   }
   return r;
 
@@ -30,7 +44,9 @@ export function generate(options: GenerateOptions): ReadonlyArray<File> {
 
     const invocations: Array<{ name: string; file: File }> = [];
     for (let i = 0; i < referencesCount; i++) {
-      const file = r[randomInt(r.length)];
+      // reference files in the beginning more often, giving something similar to Paretto distribution
+      const fileIndex = Math.floor(Math.pow(randomInt(r.length), 0.4));
+      const file = r[fileIndex];
       const fn = file.exports[randomInt(file.exports.length)];
       invocations.push({ file, name: fn.name });
     }
@@ -48,12 +64,14 @@ export function generate(options: GenerateOptions): ReadonlyArray<File> {
       return p;
     }, {});
 
-    const header = Object.keys(groupedInvocations).map(
-      path =>
-        `import { ${Object.keys(
-          groupedInvocations[path].imports
-        ).join()} } from '${path.substring(0, path.length - 3)}';`
-    ).join("\n");
+    const header = Object.keys(groupedInvocations)
+      .map(
+        path =>
+          `import { ${Object.keys(
+            groupedInvocations[path].imports
+          ).join()} } from '${path.substring(0, path.length - 3)}';`
+      )
+      .join("\n");
 
     const functions = [];
     const newFunctions = [];
@@ -65,7 +83,15 @@ export function generate(options: GenerateOptions): ReadonlyArray<File> {
       functions.push(body);
     }
 
+    const references: UsedReference[] = Object.keys(groupedInvocations).map(
+      path => ({
+        file: groupedInvocations[path].file,
+        exports: Object.keys(groupedInvocations[path].imports)
+      })
+    );
+
     return {
+      references,
       contents: header + functions.join("\n"),
       exports: newFunctions.map(x => ({
         name: x
