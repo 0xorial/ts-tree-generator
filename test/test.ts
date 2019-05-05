@@ -14,8 +14,20 @@ describe("generator", () => {
     const files = generate({ count: 1 });
     const r = compileTypeScriptCode(files);
     if (r.diagnostics.length !== 0) {
-      assert.fail(r.diagnostics);
+      const diagnostics = r.diagnostics[0];
+      assert.fail(diagnostics.error + diagnostics.file);
     }
+  });
+
+  it("should generate many files", () => {
+    const count = 1000;
+    const files = generate({ count: count });
+    const r = compileTypeScriptCode(files);
+    if (r.diagnostics.length !== 0) {
+      const diagnostics = r.diagnostics[0];
+      assert.fail(diagnostics.error + diagnostics.file);
+    }
+    expect(files).to.have.length(count);
   });
 });
 
@@ -41,7 +53,7 @@ function makeCompilerHost(mfs: IFs) {
     const libName = basename(lib);
     const c = fs.readFileSync(resolve(tsDir, lib), "utf-8");
     mfs.writeFileSync(resolve("/", libName), c);
-  });  
+  });
 
   const host: ts.CompilerHost = {
     fileExists: path => mfs.readFileSync(path) !== undefined,
@@ -80,14 +92,16 @@ function compileTypeScriptCode(code: ReadonlyArray<File>) {
   const program = ts.createProgram(fileNames, options, host);
   const diagnostics = ts.getPreEmitDiagnostics(program);
   const emitResult = program.emit();
+  const formatHost: ts.FormatDiagnosticsHost = {
+    getNewLine: () => ts.sys.newLine,
+    getCurrentDirectory: () => "/",
+    getCanonicalFileName: x => x
+  };
+  const diag = emitResult.diagnostics.concat(diagnostics);
   return {
-    diagnostics: ts.formatDiagnostics(
-      emitResult.diagnostics.concat(diagnostics),
-      {
-        getNewLine: () => ts.sys.newLine,
-        getCurrentDirectory: () => "/",
-        getCanonicalFileName: x => x
-      }
-    )
+    diagnostics: diag.map(x => ({
+      error: ts.formatDiagnostic(x, formatHost),
+      file: x.file!.getText()
+    }))
   };
 }
