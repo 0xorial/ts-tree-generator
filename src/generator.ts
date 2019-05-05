@@ -8,6 +8,7 @@ export interface File {
 }
 
 export function generate(options: GenerateOptions): ReadonlyArray<File> {
-    return [{contents: '', relativePath: ''}];
+    return [{contents: 'const x = 1;', relativePath: './test.ts'}];
+    
 
 }
