@@ -1,10 +1,14 @@
 {
   "name": "ts-tree-generator",
   "version": "1.0.0",
-  "main": "index.js",
   "repository": "https://github.com/0xorial/ts-tree-generator.git",
   "author": "0xorial <0xorial@gmail.com>",
   "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "start": "mocha -r ts-node/register test/**/*test.ts  --watch --recursive --watch-extensions ts --timeout 10000"
   },
