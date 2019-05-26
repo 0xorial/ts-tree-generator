@@ -1,6 +1,6 @@
 import * as ts from "typescript";
-import { Volume } from "memfs/lib/volume";
 import { dirname, basename, resolve } from "path";
+import { Volume } from "memfs/lib/volume";
 import { IFs, createFsFromVolume } from "memfs";
 import * as fs from "fs";
 import { File } from "../src/generator";
